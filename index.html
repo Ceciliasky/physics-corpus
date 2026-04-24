@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>初中物理教材语料库</title>
     <style>
-        /* 样式保持不变（已省略，完整内容与您提供的相同） */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: system-ui, 'Segoe UI', monospace; background: #F9FAFB; color: #334155; line-height: 1.6; }
         .app { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
@@ -46,7 +45,7 @@
                 tags: 'ams'
             },
             options: { ignoreHtmlClass: 'no-mathjax' },
-            startup: { ready: () => MathJax.startup.defaultReady() }
+            startup: { ready: () => { console.log('MathJax ready'); } }
         };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
@@ -99,7 +98,7 @@
                 }
             });
             corpusData.sort((a,b) => a.chapter_number - b.chapter_number);
-            // 绑定导航栏点击事件（只绑定一次）
+            // 绑定导航栏点击事件
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.removeEventListener('click', window.navClickHandler);
                 window.navClickHandler = (e) => {
@@ -114,13 +113,23 @@
         }
     }
 
+    // 安全调用 MathJax 渲染公式
+    function safelyRenderMath() {
+        if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
+            MathJax.typesetPromise().catch(err => console.warn('MathJax渲染出错:', err));
+        } else {
+            console.warn('MathJax未就绪，延迟重试...');
+            setTimeout(safelyRenderMath, 200);
+        }
+    }
+
     function renderPage() {
         if (currentPage === 'home') renderHome();
         else if (currentPage === 'browse') renderBrowse();
         else if (currentPage === 'search') renderSearch();
         else if (currentPage === 'exercises') renderExercises();
         highlightNav();
-        if (window.MathJax) MathJax.typesetPromise();
+        safelyRenderMath();
     }
 
     function highlightNav() {
@@ -240,7 +249,7 @@
                     const idx = parseInt(el.dataset.searchIdx);
                     const ch = results[idx];
                     document.getElementById('searchPreview').innerHTML = `<div class="preview-content">${renderMarkdown(ch.content)}</div><div>${(ch.concepts || []).map(c => `<span class="concept-tag">${escapeHtml(c)}</span>`).join('')}</div>`;
-                    if (window.MathJax) MathJax.typesetPromise();
+                    safelyRenderMath();
                 });
             });
         };
@@ -274,7 +283,7 @@
                     const idx = parseInt(el.dataset.exIdx);
                     const ex = filtered[idx];
                     document.getElementById('exPreview').innerHTML = `<div class="preview-content">${renderMarkdown(ex.text)}</div><div><strong>版本:</strong> ${ex.version} ${ex.grade} ${ex.volume}<br><strong>章节:</strong> ${ex.chapter_name}<br><strong>类型:</strong> ${ex.type}<br><strong>概念:</strong> ${ex.concepts ? ex.concepts.join(', ') : '无'}</div>`;
-                    if (window.MathJax) MathJax.typesetPromise();
+                    safelyRenderMath();
                 });
             });
         };
