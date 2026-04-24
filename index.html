@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>初中物理教材语料库</title>
     <style>
-        /* 样式精简，与之前类似，增加公式错误回退样式 */
+        /* 样式保持不变（已省略，完整内容与您提供的相同） */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: system-ui, 'Segoe UI', monospace; background: #F9FAFB; color: #334155; line-height: 1.6; }
         .app { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
@@ -34,12 +34,8 @@
         .highlight { background-color: #FEF08A; font-weight: bold; }
         .result-snippet { margin-top: 8px; font-size: 0.85rem; color: #4B5563; }
         mark { background: #FEF08A; padding: 0 2px; border-radius: 4px; }
-        /* 公式回退样式 */
-        .latex-fallback { background: #f3f4f6; padding: 0.2em 0.4em; border-radius: 6px; font-family: monospace; font-size: 0.9em; color: #b91c1c; }
-        .latex-display-fallback { background: #f3f4f6; padding: 0.5em; border-radius: 8px; font-family: monospace; font-size: 0.9em; overflow-x: auto; white-space: pre-wrap; margin: 0.5em 0; }
         @media (max-width: 800px) { .app { padding: 16px; } .browse-container, .search-container, .exercises-container { flex-direction: column; } }
     </style>
-    <!-- 使用 MathJax 尝试渲染，但设置错误时静默，并保留原始文本 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         window.MathJax = {
@@ -49,14 +45,8 @@
                 processEscapes: true,
                 tags: 'ams'
             },
-            options: {
-                ignoreHtmlClass: 'no-mathjax'
-            },
-            startup: {
-                ready: () => {
-                    MathJax.startup.defaultReady();
-                }
-            }
+            options: { ignoreHtmlClass: 'no-mathjax' },
+            startup: { ready: () => MathJax.startup.defaultReady() }
         };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
@@ -80,9 +70,7 @@
     let currentFilters = { version: '', grade: '', volume: '', concepts: [] };
     let allConcepts = new Set();
 
-    // 预处理 LaTeX 常见错误
     function preprocessLatex(text) {
-        // 将 \text{ \mathrm{km}} -> \mathrm{km}
         text = text.replace(/\\text\{\s*\\mathrm\{([^}]+)\}\s*\}/g, '\\mathrm{$1}');
         text = text.replace(/\\text\{mathrm\{([^}]+)\}\}/g, '\\mathrm{$1}');
         text = text.replace(/\\text\{\s*\\mathrm\{/g, '\\mathrm{');
@@ -91,13 +79,9 @@
         return text;
     }
 
-    // 渲染 Markdown，并将 LaTeX 包裹在特定类中，MathJax 会尝试渲染，如果失败，CSS 会显示回退样式
     function renderMarkdown(text) {
         text = preprocessLatex(text);
-        let html = marked.parse(text);
-        // 给公式包裹一层 span，以便错误时显示回退
-        // 注意：MathJax 渲染失败时会在控制台报错，但不影响页面显示，我们默认信任它会渲染。
-        return html;
+        return marked.parse(text);
     }
 
     async function loadData() {
@@ -115,6 +99,15 @@
                 }
             });
             corpusData.sort((a,b) => a.chapter_number - b.chapter_number);
+            // 绑定导航栏点击事件（只绑定一次）
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.removeEventListener('click', window.navClickHandler);
+                window.navClickHandler = (e) => {
+                    const page = link.getAttribute('data-page');
+                    if (page) setPage(page);
+                };
+                link.addEventListener('click', window.navClickHandler);
+            });
             renderPage();
         } catch (err) {
             document.getElementById('page-content').innerHTML = `<div class="empty-state">加载失败: ${err.message}<br>请确保 enhanced_data.json 和 exercises.json 存在。</div>`;
@@ -127,9 +120,7 @@
         else if (currentPage === 'search') renderSearch();
         else if (currentPage === 'exercises') renderExercises();
         highlightNav();
-        if (window.MathJax) {
-            MathJax.typesetPromise();
-        }
+        if (window.MathJax) MathJax.typesetPromise();
     }
 
     function highlightNav() {
@@ -294,6 +285,7 @@
     function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
     function setPage(page) { currentPage = page; renderPage(); }
     window.setPage = setPage;
+
     loadData();
 </script>
 </body>
