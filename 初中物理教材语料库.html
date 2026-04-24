@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>初中物理教材语料库</title>
+    <style>
+        /* 样式精简，与之前类似，增加公式错误回退样式 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, 'Segoe UI', monospace; background: #F9FAFB; color: #334155; line-height: 1.6; }
+        .app { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+        .navbar { display: flex; gap: 32px; border-bottom: 1px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+        .nav-link { font-size: 1.1rem; font-weight: 500; color: #5A6E8F; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
+        .nav-link:hover { color: #3B5C8F; }
+        .nav-link.active { color: #5A6E8F; border-bottom-color: #C9A87C; }
+        .stats-grid { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 48px; }
+        .stat-card { background: white; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); padding: 24px 32px; flex: 1; text-align: center; }
+        .stat-number { font-size: 2.5rem; font-weight: 700; color: #C9A87C; }
+        .browse-container, .search-container, .exercises-container { display: flex; gap: 28px; flex-wrap: wrap; }
+        .filters-panel { flex: 0 0 260px; background: white; border-radius: 20px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); align-self: start; }
+        .filter-group { margin-bottom: 24px; }
+        .filter-group label { font-weight: 600; display: block; margin-bottom: 8px; color: #5A6E8F; }
+        select, .search-input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #E2E8F0; background: white; }
+        .chapter-list, .search-results, .exercise-list { flex: 2; background: white; border-radius: 20px; padding: 16px; max-height: 75vh; overflow-y: auto; }
+        .chapter-item, .result-item, .exercise-item { padding: 14px 16px; border-radius: 14px; margin-bottom: 8px; background: #F9FAFB; cursor: pointer; transition: 0.2s; }
+        .chapter-item:hover, .result-item:hover, .exercise-item:hover { background: #F1F5F9; }
+        .preview-panel { flex: 2.5; background: white; border-radius: 20px; padding: 24px; overflow-y: auto; max-height: 75vh; }
+        .preview-content h1, h2, h3 { margin-top: 1.2em; }
+        .preview-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        .preview-content th, td { border: 1px solid #CBD5E1; padding: 8px 12px; }
+        .concept-tag { display: inline-block; background: #F1F5F9; padding: 4px 10px; border-radius: 30px; font-size: 0.75rem; margin-right: 8px; margin-bottom: 6px; }
+        .empty-state { text-align: center; color: #64748B; padding: 40px; }
+        button { background: #5A6E8F; color: white; border: none; border-radius: 30px; padding: 8px 20px; cursor: pointer; }
+        .highlight { background-color: #FEF08A; font-weight: bold; }
+        .result-snippet { margin-top: 8px; font-size: 0.85rem; color: #4B5563; }
+        mark { background: #FEF08A; padding: 0 2px; border-radius: 4px; }
+        /* 公式回退样式 */
+        .latex-fallback { background: #f3f4f6; padding: 0.2em 0.4em; border-radius: 6px; font-family: monospace; font-size: 0.9em; color: #b91c1c; }
+        .latex-display-fallback { background: #f3f4f6; padding: 0.5em; border-radius: 8px; font-family: monospace; font-size: 0.9em; overflow-x: auto; white-space: pre-wrap; margin: 0.5em 0; }
+        @media (max-width: 800px) { .app { padding: 16px; } .browse-container, .search-container, .exercises-container { flex-direction: column; } }
+    </style>
+    <!-- 使用 MathJax 尝试渲染，但设置错误时静默，并保留原始文本 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                tags: 'ams'
+            },
+            options: {
+                ignoreHtmlClass: 'no-mathjax'
+            },
+            startup: {
+                ready: () => {
+                    MathJax.startup.defaultReady();
+                }
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
+</head>
+<body>
+<div class="app">
+    <div class="navbar">
+        <div class="nav-link" data-page="home">🏠 首页</div>
+        <div class="nav-link" data-page="browse">📚 教材浏览</div>
+        <div class="nav-link" data-page="search">🔍 知识检索</div>
+        <div class="nav-link" data-page="exercises">📝 习题库</div>
+    </div>
+    <div id="page-content"></div>
+</div>
+
+<script>
+    let corpusData = [];
+    let exercisesData = [];
+    let currentPage = 'home';
+    let currentSelectedChapter = null;
+    let currentFilters = { version: '', grade: '', volume: '', concepts: [] };
+    let allConcepts = new Set();
+
+    // 预处理 LaTeX 常见错误
+    function preprocessLatex(text) {
+        // 将 \text{ \mathrm{km}} -> \mathrm{km}
+        text = text.replace(/\\text\{\s*\\mathrm\{([^}]+)\}\s*\}/g, '\\mathrm{$1}');
+        text = text.replace(/\\text\{mathrm\{([^}]+)\}\}/g, '\\mathrm{$1}');
+        text = text.replace(/\\text\{\s*\\mathrm\{/g, '\\mathrm{');
+        text = text.replace(/\}\s*\}/g, '}');
+        text = text.replace(/(\d+)\s*\\text\{([^}]+)\}/g, '$1 \\mathrm{$2}');
+        return text;
+    }
+
+    // 渲染 Markdown，并将 LaTeX 包裹在特定类中，MathJax 会尝试渲染，如果失败，CSS 会显示回退样式
+    function renderMarkdown(text) {
+        text = preprocessLatex(text);
+        let html = marked.parse(text);
+        // 给公式包裹一层 span，以便错误时显示回退
+        // 注意：MathJax 渲染失败时会在控制台报错，但不影响页面显示，我们默认信任它会渲染。
+        return html;
+    }
+
+    async function loadData() {
+        try {
+            const [corpusRes, exRes] = await Promise.all([
+                fetch('./enhanced_data.json'),
+                fetch('./exercises.json')
+            ]);
+            if (!corpusRes.ok) throw new Error('教材数据加载失败');
+            corpusData = await corpusRes.json();
+            if (exRes.ok) exercisesData = await exRes.json();
+            corpusData.forEach(item => {
+                if (item.concepts && Array.isArray(item.concepts)) {
+                    item.concepts.forEach(c => allConcepts.add(c));
+                }
+            });
+            corpusData.sort((a,b) => a.chapter_number - b.chapter_number);
+            renderPage();
+        } catch (err) {
+            document.getElementById('page-content').innerHTML = `<div class="empty-state">加载失败: ${err.message}<br>请确保 enhanced_data.json 和 exercises.json 存在。</div>`;
+        }
+    }
+
+    function renderPage() {
+        if (currentPage === 'home') renderHome();
+        else if (currentPage === 'browse') renderBrowse();
+        else if (currentPage === 'search') renderSearch();
+        else if (currentPage === 'exercises') renderExercises();
+        highlightNav();
+        if (window.MathJax) {
+            MathJax.typesetPromise();
+        }
+    }
+
+    function highlightNav() {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            if (link.dataset.page === currentPage) link.classList.add('active');
+            else link.classList.remove('active');
+        });
+    }
+
+    function renderHome() {
+        const versions = new Set(corpusData.map(c => c.version)).size;
+        const chapters = corpusData.length;
+        const concepts = allConcepts.size;
+        const exercises = exercisesData ? exercisesData.length : 0;
+        document.getElementById('page-content').innerHTML = `
+            <div class="stats-grid">
+                <div class="stat-card"><div class="stat-number">${versions}</div><div>教材版本</div></div>
+                <div class="stat-card"><div class="stat-number">${chapters}</div><div>章节总数</div></div>
+                <div class="stat-card"><div class="stat-number">${concepts}</div><div>物理概念</div></div>
+                <div class="stat-card"><div class="stat-number">${exercises}</div><div>习题块</div></div>
+            </div>
+            <div style="text-align:center; margin-top:20px;">
+                <button onclick="setPage('browse')">📖 开始浏览教材</button>
+                <button onclick="setPage('search')" style="margin-left:16px;">🔍 知识检索</button>
+                <button onclick="setPage('exercises')" style="margin-left:16px;">📝 习题库</button>
+            </div>
+        `;
+    }
+
+    function renderBrowse() {
+        const versions = [...new Set(corpusData.map(c => c.version))];
+        const grades = [...new Set(corpusData.map(c => c.grade))];
+        const volumes = [...new Set(corpusData.map(c => c.volume))];
+        const filtered = corpusData.filter(c => 
+            (!currentFilters.version || c.version === currentFilters.version) &&
+            (!currentFilters.grade || c.grade === currentFilters.grade) &&
+            (!currentFilters.volume || c.volume === currentFilters.volume) &&
+            (currentFilters.concepts.length === 0 || (c.concepts && c.concepts.some(con => currentFilters.concepts.includes(con))))
+        );
+        const chapterListHtml = filtered.map((ch, idx) => `<div class="chapter-item" data-chapter-idx="${idx}"><div class="chapter-title">${escapeHtml(ch.chapter_name)}</div><div class="chapter-meta">${ch.version} · ${ch.grade} · ${ch.volume}</div></div>`).join('');
+        const selectedHtml = currentSelectedChapter ? `<div class="preview-content">${renderMarkdown(currentSelectedChapter.content)}</div><div>${(currentSelectedChapter.concepts || []).map(c => `<span class="concept-tag">${escapeHtml(c)}</span>`).join('')}</div>` : '<div class="empty-state">点击左侧章节查看内容</div>';
+        document.getElementById('page-content').innerHTML = `
+            <div class="browse-container">
+                <div class="filters-panel">
+                    <div class="filter-group"><label>版本</label><select id="filterVersion"><option value="">全部</option>${versions.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')}</select></div>
+                    <div class="filter-group"><label>年级</label><select id="filterGrade"><option value="">全部</option>${grades.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
+                    <div class="filter-group"><label>册次</label><select id="filterVolume"><option value="">全部</option>${volumes.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')}</select></div>
+                    <div class="filter-group"><label>概念筛选</label><div id="conceptList"></div></div>
+                    <button id="resetFilters">重置筛选</button>
+                </div>
+                <div class="chapter-list" id="chapterList">${chapterListHtml || '<div class="empty-state">无章节</div>'}</div>
+                <div class="preview-panel" id="previewPanel">${selectedHtml}</div>
+            </div>
+        `;
+        const conceptListDiv = document.getElementById('conceptList');
+        if (conceptListDiv) {
+            conceptListDiv.innerHTML = [...allConcepts].sort().map(con => `<label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" value="${escapeHtml(con)}" ${currentFilters.concepts.includes(con) ? 'checked' : ''}> ${escapeHtml(con)}</label>`).join('');
+        }
+        document.getElementById('filterVersion')?.addEventListener('change', (e) => { currentFilters.version = e.target.value; renderBrowse(); });
+        document.getElementById('filterGrade')?.addEventListener('change', (e) => { currentFilters.grade = e.target.value; renderBrowse(); });
+        document.getElementById('filterVolume')?.addEventListener('change', (e) => { currentFilters.volume = e.target.value; renderBrowse(); });
+        document.getElementById('resetFilters')?.addEventListener('click', () => { currentFilters = { version: '', grade: '', volume: '', concepts: [] }; renderBrowse(); });
+        document.querySelectorAll('#conceptList input[type="checkbox"]').forEach(cb => cb.addEventListener('change', () => {
+            currentFilters.concepts = [...document.querySelectorAll('#conceptList input:checked')].map(cb => cb.value);
+            renderBrowse();
+        }));
+        document.querySelectorAll('.chapter-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.dataset.chapterIdx);
+                if (!isNaN(idx)) currentSelectedChapter = filtered[idx];
+                renderBrowse();
+            });
+        });
+    }
+
+    function renderSearch() {
+        document.getElementById('page-content').innerHTML = `
+            <div class="search-container">
+                <div style="flex:1; background:white; border-radius:20px; padding:20px;">
+                    <input type="text" id="searchKeyword" class="search-input" placeholder="搜索教材内容（支持关键词）" style="margin-bottom:20px;">
+                    <div id="searchResultList" class="search-results"></div>
+                </div>
+                <div class="preview-panel" id="searchPreview"><div class="empty-state">点击搜索结果查看详情</div></div>
+            </div>
+        `;
+        const searchInput = document.getElementById('searchKeyword');
+        const updateSearch = () => {
+            const keyword = searchInput.value.trim();
+            if (!keyword) {
+                document.getElementById('searchResultList').innerHTML = '<div class="empty-state">输入关键词开始搜索</div>';
+                return;
+            }
+            const lowerKeyword = keyword.toLowerCase();
+            const results = corpusData.filter(ch => ch.content.toLowerCase().includes(lowerKeyword));
+            const resultContainer = document.getElementById('searchResultList');
+            if (results.length === 0) {
+                resultContainer.innerHTML = '<div class="empty-state">未找到相关章节</div>';
+                return;
+            }
+            resultContainer.innerHTML = results.map((ch, idx) => {
+                let snippet = ch.content.substring(0, 400).replace(/\n/g, ' ');
+                const idxPos = snippet.toLowerCase().indexOf(lowerKeyword);
+                if (idxPos !== -1) {
+                    const start = Math.max(0, idxPos - 60);
+                    const end = Math.min(snippet.length, idxPos + 120);
+                    snippet = (start > 0 ? '...' : '') + snippet.substring(start, end) + (end < snippet.length ? '...' : '');
+                    snippet = snippet.replace(new RegExp(`(${keyword})`, 'gi'), '<mark>$1</mark>');
+                }
+                return `<div class="result-item" data-search-idx="${idx}">
+                            <div class="chapter-title">${escapeHtml(ch.chapter_name)}</div>
+                            <div class="chapter-meta">${ch.version} · ${ch.grade} · ${ch.volume}</div>
+                            <div class="result-snippet">${snippet}</div>
+                        </div>`;
+            }).join('');
+            document.querySelectorAll('.result-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = parseInt(el.dataset.searchIdx);
+                    const ch = results[idx];
+                    document.getElementById('searchPreview').innerHTML = `<div class="preview-content">${renderMarkdown(ch.content)}</div><div>${(ch.concepts || []).map(c => `<span class="concept-tag">${escapeHtml(c)}</span>`).join('')}</div>`;
+                    if (window.MathJax) MathJax.typesetPromise();
+                });
+            });
+        };
+        searchInput.addEventListener('input', updateSearch);
+        updateSearch();
+    }
+
+    function renderExercises() {
+        if (!exercisesData || exercisesData.length === 0) {
+            document.getElementById('page-content').innerHTML = `<div class="empty-state">暂无习题数据，请先运行 extract_exercises.py 生成 exercises.json</div>`;
+            return;
+        }
+        document.getElementById('page-content').innerHTML = `
+            <div class="exercises-container">
+                <div style="flex:1; background:white; border-radius:20px; padding:20px;">
+                    <input type="text" id="exSearch" class="search-input" placeholder="搜索关键词或概念" style="margin-bottom:20px;">
+                    <div id="exerciseList" class="exercise-list"></div>
+                </div>
+                <div class="preview-panel" id="exPreview"><div class="empty-state">点击习题查看详情</div></div>
+            </div>
+        `;
+        const searchInput = document.getElementById('exSearch');
+        const updateList = () => {
+            const keyword = searchInput.value.toLowerCase();
+            const filtered = exercisesData.filter(ex => ex.text.toLowerCase().includes(keyword) || (ex.concepts && ex.concepts.some(c => c.toLowerCase().includes(keyword))));
+            const container = document.getElementById('exerciseList');
+            if (filtered.length === 0) { container.innerHTML = '<div class="empty-state">无匹配习题</div>'; return; }
+            container.innerHTML = filtered.map((ex, idx) => `<div class="exercise-item" data-ex-idx="${idx}"><div class="chapter-title">${escapeHtml(ex.chapter_name)}</div><div class="chapter-meta">${ex.version} ${ex.grade} ${ex.volume} | ${ex.type}</div><div class="exercise-text" style="margin-top:8px; font-size:0.85rem; color:#4B5563;">${escapeHtml(ex.text.substring(0, 150))}...</div><div style="margin-top:6px;">概念: ${ex.concepts && ex.concepts.length ? ex.concepts.join(', ') : '无'}</div></div>`).join('');
+            document.querySelectorAll('.exercise-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = parseInt(el.dataset.exIdx);
+                    const ex = filtered[idx];
+                    document.getElementById('exPreview').innerHTML = `<div class="preview-content">${renderMarkdown(ex.text)}</div><div><strong>版本:</strong> ${ex.version} ${ex.grade} ${ex.volume}<br><strong>章节:</strong> ${ex.chapter_name}<br><strong>类型:</strong> ${ex.type}<br><strong>概念:</strong> ${ex.concepts ? ex.concepts.join(', ') : '无'}</div>`;
+                    if (window.MathJax) MathJax.typesetPromise();
+                });
+            });
+        };
+        searchInput.addEventListener('input', updateList);
+        updateList();
+    }
+
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+    function setPage(page) { currentPage = page; renderPage(); }
+    window.setPage = setPage;
+    loadData();
+</script>
+</body>
+</html>
