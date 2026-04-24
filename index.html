@@ -45,7 +45,7 @@
                 tags: 'ams'
             },
             options: { ignoreHtmlClass: 'no-mathjax' },
-            startup: { ready: () => { console.log('MathJax ready'); } }
+            startup: { ready: () => console.log('MathJax ready') }
         };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
@@ -98,7 +98,6 @@
                 }
             });
             corpusData.sort((a,b) => a.chapter_number - b.chapter_number);
-            // 绑定导航栏点击事件
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.removeEventListener('click', window.navClickHandler);
                 window.navClickHandler = (e) => {
@@ -113,12 +112,10 @@
         }
     }
 
-    // 安全调用 MathJax 渲染公式
     function safelyRenderMath() {
         if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
-            MathJax.typesetPromise().catch(err => console.warn('MathJax渲染出错:', err));
+            MathJax.typesetPromise().catch(e => console.warn('MathJax渲染出错:', e));
         } else {
-            console.warn('MathJax未就绪，延迟重试...');
             setTimeout(safelyRenderMath, 200);
         }
     }
@@ -174,9 +171,9 @@
         document.getElementById('page-content').innerHTML = `
             <div class="browse-container">
                 <div class="filters-panel">
-                    <div class="filter-group"><label>版本</label><select id="filterVersion"><option value="">全部</option>${versions.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')}</select></div>
-                    <div class="filter-group"><label>年级</label><select id="filterGrade"><option value="">全部</option>${grades.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
-                    <div class="filter-group"><label>册次</label><select id="filterVolume"><option value="">全部</option>${volumes.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')}</select></div>
+                    <div class="filter-group"><label>版本</label><select id="filterVersion"><option value="">全部</option>${versions.map(v => `<option value="${escapeHtml(v)}" ${currentFilters.version === v ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select></div>
+                    <div class="filter-group"><label>年级</label><select id="filterGrade"><option value="">全部</option>${grades.map(g => `<option value="${escapeHtml(g)}" ${currentFilters.grade === g ? 'selected' : ''}>${escapeHtml(g)}</option>`).join('')}</select></div>
+                    <div class="filter-group"><label>册次</label><select id="filterVolume"><option value="">全部</option>${volumes.map(v => `<option value="${escapeHtml(v)}" ${currentFilters.volume === v ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select></div>
                     <div class="filter-group"><label>概念筛选</label><div id="conceptList"></div></div>
                     <button id="resetFilters">重置筛选</button>
                 </div>
@@ -184,6 +181,14 @@
                 <div class="preview-panel" id="previewPanel">${selectedHtml}</div>
             </div>
         `;
+        // 强制设置下拉框的显示值（解决 selected 属性可能不生效的问题）
+        const filterVersion = document.getElementById('filterVersion');
+        const filterGrade = document.getElementById('filterGrade');
+        const filterVolume = document.getElementById('filterVolume');
+        if (filterVersion) filterVersion.value = currentFilters.version;
+        if (filterGrade) filterGrade.value = currentFilters.grade;
+        if (filterVolume) filterVolume.value = currentFilters.volume;
+
         const conceptListDiv = document.getElementById('conceptList');
         if (conceptListDiv) {
             conceptListDiv.innerHTML = [...allConcepts].sort().map(con => `<label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" value="${escapeHtml(con)}" ${currentFilters.concepts.includes(con) ? 'checked' : ''}> ${escapeHtml(con)}</label>`).join('');
